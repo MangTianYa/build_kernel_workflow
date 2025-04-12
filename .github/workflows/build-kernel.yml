@@ -84,6 +84,10 @@ jobs:
       run: |
         wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.gz
 
+    - name: Python2
+      run: |
+        wget -q https://www.python.org/ftp/python/2.7.9/Python-2.7.9.tgz
+      
     - name: Download Custom Clang Toolchain
       if: env.USE_CUSTOM_CLANG == 'true'
       run: |
