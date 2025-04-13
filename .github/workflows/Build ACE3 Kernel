@@ -37,3 +37,37 @@ on:
         required: true
         default: true
         type: boolean
+
+
+jobs:
+  build:
+    name: Build Kernel
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup Configuration
+      run: |
+        echo "KERNEL_SOURCE=${{ github.event.inputs.KERNEL_SOURCE }}" >> $GITHUB_ENV
+        echo "KERNEL_SOURCE_BRANCH=${{ github.event.inputs.KERNEL_SOURCE_BRANCH }}" >> $GITHUB_ENV
+        echo "KERNEL_DEFCONFIG=${{ github.event.inputs.KERNEL_DEFCONFIG }}" >> $GITHUB_ENV
+        echo "AOSP_CLANG_BRANCH=${{ github.event.inputs.AOSP_CLANG_BRANCH }}" >> $GITHUB_ENV
+        echo "AOSP_CLANG_VERSION=${{ github.event.inputs.AOSP_CLANG_VERSION }}" >> $GITHUB_ENV
+        echo "USE_CUSTOM_CLANG=${{ github.event.inputs.USE_CUSTOM_CLANG }}" >> $GITHUB_ENV
+        echo "CUSTOM_CLANG_URL=${{ github.event.inputs.CUSTOM_CLANG_URL }}" >> $GITHUB_ENV
+        # echo "PERSONAL_TOKEN=${{ github.event.inputs.PERSONAL_TOKEN }}" >> $GITHUB_ENV
+        echo "ENABLE_KERNELSU=${{ github.event.inputs.ENABLE_KERNELSU }}" >> $GITHUB_ENV
+        echo "ENABLE_KERNELSU_DEBUG=${{ github.event.inputs.ENABLE_KERNELSU_DEBUG }}" >> $GITHUB_ENV
+        echo "ADD_PATH_UMOUNT=${{ github.event.inputs.ADD_PATH_UMOUNT }}" >> $GITHUB_ENV
+
+    - name: Setup Build Environment
+      run: |
+        echo "BUILD_TIME=$(TZ=Asia/Shanghai date "+%Y%m%d%H%M")" >> $GITHUB_ENV
+        echo "DEVICE=$(echo ${{ env.KERNEL_DEFCONFIG }} | sed 's!vendor/!!;s/_defconfig//;s/_user//;s/-perf//')" >> $GITHUB_ENV
+        sudo apt update
+        sudo apt install bc make bison build-essential curl flex g++-multilib gcc-multilib git gnupg gperf libfuse-dev lib32readline-dev lib32z1-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zlib1g-dev libc6-dev-i386 libncurses6 libncursesw6 lib32ncurses-dev lib32ncurses6 lib32ncursesw6 libncurses5-dev
+
+    - name: Download AOSP Clang Toolchain
+      if: env.USE_CUSTOM_CLANG == 'false'
+      run: |
+        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.gz
+
