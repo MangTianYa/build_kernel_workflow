@@ -1,4 +1,4 @@
-name: Build ACE3 Kernel
+name: Build Kernel
 
 on:
   workflow_dispatch:
@@ -22,7 +22,16 @@ on:
       AOSP_CLANG_VERSION:
         description: 'AOSP Clang version'
         required: true
-        default: 'r547379'
+        default: 'r530567'
+      USE_CUSTOM_CLANG:
+        description: 'Use Custom Clang'
+        required: true
+        default: false
+        type: boolean
+      CUSTOM_CLANG_URL:
+        description: 'Custom Clang URL'
+        required: true
+        default: 'https://raw.githubusercontent.com/ZyCromerZ/Clang/main/Clang-main-link.txt'
       # PERSONAL_TOKEN:
       #   description: 'Personal access token'
       #   required: true
@@ -32,115 +41,140 @@ on:
         required: true
         default: true
         type: boolean
+      ENABLE_KERNELSU_DEBUG:
+        description: 'Use KernelSU Debug'
+        required: true
+        default: false
+        type: boolean
+      ADD_PATH_UMOUNT:
+        description: 'Add `path_umount` for KernelSU'
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   build:
+    name: Build Kernel
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 8192
-          temp-reserve-mb: 2048
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-
-      - name: Install dependencies
-        run: |
-         sudo apt update && sudo apt upgrade -y
-
-     - name: Download AOSP Clang Toolchain
-       if: env.USE_CUSTOM_CLANG == 'false'
-       run: |
-         wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.gz
-
-
-      - name: Python3
-        run: |
-         sudo apt update
-         sudo apt install python3
-         sudo apt install python3-dev
-         python3 --version
-
-      - name: Install repo tool
-        run: |
-         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
-         chmod a+x ~/repo
-         sudo mv ~/repo /usr/local/bin/repo
-
-      - name: Initialize repo and sync
-        run: |
-         mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-         repo sync
-         rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
-         rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
-         sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
-         sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
-
-        - name: Setup KernelSU
-      if: env.USE_KERNELSU == 'true'
+    - uses: actions/checkout@v4
+    - name: Setup Configuration
       run: |
-        cd android-kernel
-        if [ ${{ env.USE_KPROBES }} = true ] ; then
-            echo "CONFIG_MODULES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            echo "CONFIG_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            echo "CONFIG_HAVE_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            echo "CONFIG_KPROBE_EVENTS=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-            echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
-        else
-            if git apply --check ../KernelSU.patch ; then
-                git apply ../KernelSU.patch
-                curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-                echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
-            else
-                echo "KernelSU Patching failed"
-            fi
-        fi
-           # Apply patches
-           cd ./KernelSU-Next
-           patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
-           cd ../common
-           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
-           cp ../../kernel_patches/69_hide_stuff.patch ./
-           patch -p1 -F 3 < 69_hide_stuff.patch
-           git add -A && git commit -a -m "BUILD Kernel"
-           cd ..
-           cd ./msm-kernel && git add -A && git commit -a -m "BUILD Kernel"
-           cd ..
-             
-           cp ../kernel_patches/apk_sign.c_fix.patch ./
-           patch -p1 -F 3 < apk_sign.c_fix.patch
-             
-           cp ../kernel_patches/core_hook.c_fix.patch ./
-           patch -p1 --fuzz=3 < ./core_hook.c_fix.patch
-           
-           cp ../kernel_patches/selinux.c_fix.patch ./
-           patch -p1 -F 3 < selinux.c_fix.patch
-           
-      - name: Build kernel
-        run: |
-         cd kernel_workspace
-         ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
-         
-      - name: Make AnyKernel3
-        run: |
-         git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
-         rm -rf ./AnyKernel3/.git
-         cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image ./AnyKernel3/
+        echo "KERNEL_SOURCE=${{ github.event.inputs.KERNEL_SOURCE }}" >> $GITHUB_ENV
+        echo "KERNEL_SOURCE_BRANCH=${{ github.event.inputs.KERNEL_SOURCE_BRANCH }}" >> $GITHUB_ENV
+        echo "KERNEL_DEFCONFIG=${{ github.event.inputs.KERNEL_DEFCONFIG }}" >> $GITHUB_ENV
+        echo "AOSP_CLANG_BRANCH=${{ github.event.inputs.AOSP_CLANG_BRANCH }}" >> $GITHUB_ENV
+        echo "AOSP_CLANG_VERSION=${{ github.event.inputs.AOSP_CLANG_VERSION }}" >> $GITHUB_ENV
+        echo "USE_CUSTOM_CLANG=${{ github.event.inputs.USE_CUSTOM_CLANG }}" >> $GITHUB_ENV
+        echo "CUSTOM_CLANG_URL=${{ github.event.inputs.CUSTOM_CLANG_URL }}" >> $GITHUB_ENV
+        # echo "PERSONAL_TOKEN=${{ github.event.inputs.PERSONAL_TOKEN }}" >> $GITHUB_ENV
+        echo "ENABLE_KERNELSU=${{ github.event.inputs.ENABLE_KERNELSU }}" >> $GITHUB_ENV
+        echo "ENABLE_KERNELSU_DEBUG=${{ github.event.inputs.ENABLE_KERNELSU_DEBUG }}" >> $GITHUB_ENV
+        echo "ADD_PATH_UMOUNT=${{ github.event.inputs.ADD_PATH_UMOUNT }}" >> $GITHUB_ENV
 
-      - name: Upload AnyKernel3
-        uses: actions/upload-artifact@v4
-        with:
-         name: AnyKernel3_KernelSU_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
-         path: ./AnyKernel3/*
-         
-      - name: Upload Image
-        uses: actions/upload-artifact@v4
-        with:
-         name: Image_KernelSU_Next_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
-         path: kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image
+    - name: Setup Build Environment
+      run: |
+        echo "BUILD_TIME=$(TZ=Asia/Shanghai date "+%Y%m%d%H%M")" >> $GITHUB_ENV
+        echo "DEVICE=$(echo ${{ env.KERNEL_DEFCONFIG }} | sed 's!vendor/!!;s/_defconfig//;s/_user//;s/-perf//')" >> $GITHUB_ENV
+        sudo apt update
+        sudo apt install bc make bison build-essential curl flex g++-multilib gcc-multilib git gnupg gperf libfuse-dev lib32readline-dev lib32z1-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zlib1g-dev libc6-dev-i386 libncurses6 libncursesw6 lib32ncurses-dev lib32ncurses6 lib32ncursesw6 libncurses5-dev
+
+    - name: Download AOSP Clang Toolchain
+      if: env.USE_CUSTOM_CLANG == 'false'
+      run: |
+        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.gz
+
+    - name: Python3
+      run: |
+        sudo apt update
+        sudo apt install python3
+        sudo apt install python3-dev
+        python3 --version
+
+    - name: Download Custom Clang Toolchain
+      if: env.USE_CUSTOM_CLANG == 'true'
+      run: |
+        wget -q $(curl ${{ env.CUSTOM_CLANG_URL }}) -O clang.tar.gz
+
+    - name: Extract Clang Toolchain
+      run: |
+        mkdir clang
+        tar -C clang/ -zxf clang.tar.gz
+
+    - name: Checkout Kernel
+      uses: actions/checkout@v4
+      with:
+        # token: ${{env.PERSONAL_TOKEN}}
+        repository: ${{ env.KERNEL_SOURCE }}
+        ref: ${{ env.KERNEL_SOURCE_BRANCH }}
+        submodules: recursive
+        path: kernel-source
+
+    - name: Checkout AnyKernel3
+      uses: actions/checkout@v4
+      with:
+        # token: ${{env.PERSONAL_TOKEN}}
+        repository: sakana164/AnyKernel3
+        path: kernel-source/AnyKernel3
+
+    - name: Setup KernelSU
+      if: env.ENABLE_KERNELSU == 'true'
+      run: |
+        cd kernel-source
+        git config --global user.email "lightsummer233@awainatsu.moe"
+        git config --global user.name "lightsummer233"
+        git am ../patch/KernelSU.patch
+        echo "CONFIG_KSU=y" >> arch/arm64/configs/${{ env.KERNEL_DEFCONFIG }}
+        curl -LSs "https://raw.githubusercontent.com/lightsummer233/KernelSU/main/kernel/setup.sh" | bash -s main
+        echo "ENABLE_KERNELSU=-KernelSU" >> $GITHUB_ENV
+        if [ ${{ env.ENABLE_KERNELSU_DEBUG }} = true ]; then
+          echo "CONFIG_KSU_DEBUG=y" >> arch/arm64/configs/${{ env.KERNEL_DEFCONFIG }}
+        fi
+        if [ ${{ env.ADD_PATH_UMOUNT }} = true ]; then
+          git am ../patch/KernelSU-path_umount.patch
+        fi
+
+    - name: Build Kernel
+      run: |
+        cd kernel-source
+        export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+        export KBUILD_BUILD_HOST=AL1S
+        export KBUILD_BUILD_USER=awainatsu
+        make -j$(nproc --all) O=out ARCH=arm64 CC=clang ${{ env.KERNEL_DEFCONFIG }}
+
+        scripts/config --file out/.config \
+          -e THINLTO \
+          -e LTO_CLANG \
+          -d CONFIG_CFI_CLANG \
+          -d CFI_PERMISSIVE \
+          -d CFI_CLANG \
+          -e COMPAT_VDSO \
+          -e SHADOW_CALL_STACK \
+          -e SHADOW_CALL_STACK_VMAP \
+          -e RELR
+
+        make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+
+    - name: Configuration AnyKernel3
+      run: |
+        cd kernel-source
+        KERNEL_NAME=$(grep "CONFIG_LOCALVERSION=" arch/arm64/configs/vendor/xiaomi/sm8250-common.config | cut -d'-' -f2 | tr -d '"')
+        sed -i "s/アリエス/$KERNEL_NAME/g" ./AnyKernel3/anykernel.sh
+        cp out/arch/arm64/boot/Image AnyKernel3
+        # cp out/arch/arm64/boot/dtbo.img AnyKernel3
+        # cp out/arch/arm64/boot/dtb AnyKernel3
+
+    - name: Upload Kernel
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.KERNEL_SOURCE_BRANCH }}-kernel-${{ env.DEVICE }}${{ env.ENABLED_KERNELSU }}-${{ env.BUILD_TIME }}
+        path: |
+          kernel-source/AnyKernel3/
+          !kernel-source/AnyKernel3/*.git*
+          !kernel-source/AnyKernel3/patch
+          !kernel-source/AnyKernel3/modules
+          !kernel-source/AnyKernel3/ramdisk
+        compression-level: 9
