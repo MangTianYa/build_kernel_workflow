@@ -161,6 +161,8 @@ jobs:
     - name: Configuration AnyKernel3
       run: |
         cd kernel-source
+        KERNEL_NAME=$(grep "CONFIG_LOCALVERSION=" arch/arm64/configs/alioth_defconfig | cut -d'-' -f2 | tr -d '"')
+        sed -i "s/アリエス/$KERNEL_NAME/g" ./AnyKernel3/anykernel.sh
         cp out/arch/arm64/boot/Image AnyKernel3
         # cp out/arch/arm64/boot/dtbo.img AnyKernel3
         # cp out/arch/arm64/boot/dtb AnyKernel3
