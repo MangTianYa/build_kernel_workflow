@@ -130,53 +130,53 @@ jobs:
       run: |
         cd $KERNEL_PATH
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-}
+
 
     - name: Build Kernel
       run: |
          if [ "$TARGET_DEVICE" == "benz" ]; then
-        DEFCONFIG=$BENZ_DEFCONFIG
-    else
-        DEFCONFIG=$ASTON_DEFCONFIG
-    fi
-    cd $KERNEL_PATH
-    sed -i 's/ -dirty//g' scripts/setlocalversion
-    make O=out ARCH=arm64 CC=clang $BUILD_CC $DEFCONFIG savedefconfig
-    # Begin compilation
-    start=$(date +%s)
-    make O=out CC='ccache clang' CXX='ccache clang++' LTO=thin ARCH=arm64 -j`nproc` ${BUILD_CC} 2>&1 | tee error.log
-    if [ -f $KERNEL_PATH/out/arch/arm64/boot/Image ]; then
-        echo -e "${green}Kernel Compilation successful!, Zipping...${clear}"
-        make_anykernel3_zip
-    else
-        echo -e "${red}Compilation failed!${clear}"
-        echo -e "${red}Check error.log for more info!${clear}"
-        exit
-    fi
-}
+         DEFCONFIG=$BENZ_DEFCONFIG
+         else
+         DEFCONFIG=$ASTON_DEFCONFIG
+         fi
+         cd $KERNEL_PATH
+         sed -i 's/ -dirty//g' scripts/setlocalversion
+         make O=out ARCH=arm64 CC=clang $BUILD_CC $DEFCONFIG savedefconfig
+         # Begin compilation
+          start=$(date +%s)
+          make O=out CC='ccache clang' CXX='ccache clang++' LTO=thin ARCH=arm64 -j`nproc` ${BUILD_CC} 2>&1 | tee error.log
+          if [ -f $KERNEL_PATH/out/arch/arm64/boot/Image ]; then
+          echo -e "${green}Kernel Compilation successful!, Zipping...${clear}"
+          make_anykernel3_zip
+          else
+          echo -e "${red}Compilation failed!${clear}"
+          echo -e "${red}Check error.log for more info!${clear}"
+          exit
+         fi
+
     - name: Configuration AnyKernel3
       run: |
            cd $KERNEL_PATH
-    git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1 AnyKernel3
-    # Extract the kernel version from the Makefile
-    if [ "$DEVICE_CONFIG" == "vendor/oplus/benz.config" ]; then
-        zip_name="OPNCE4-v5.15.$(grep "^SUBLEVEL =" Makefile | awk '{print $3}')-$(date +"%Y%m%d-%H%M").zip"
-    else
-        zip_name="OP12R-v5.15.$(grep "^SUBLEVEL =" Makefile | awk '{print $3}')-$(date +"%Y%m%d-%H%M").zip"
-    fi
-    cd $KERNEL_PATH/AnyKernel3
-    cp $KERNEL_PATH/out/arch/arm64/boot/Image $KERNEL_PATH/AnyKernel3/
-    zip -r kernel.zip ./*
-    mv kernel.zip $KERNEL_PATH/out
-    ln -sf $KERNEL_PATH/out/kernel.zip $KERNEL_PATH/out/${zip_name}
-    echo -e "${green}out: ${KERNEL_PATH}/out/${zip_name}${clear}"
-    echo -e "${clear}"
-    echo -e "${green}Completed in $(($(date +%s) - start)) seconds.${clear}"
-    cd $KERNEL_PATH
-    git checkout HEAD scripts/setlocalversion
-    rm AnyKernel3/Image
-    exit
-}
+           git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1 AnyKernel3
+           # Extract the kernel version from the Makefile
+           if [ "$DEVICE_CONFIG" == "vendor/oplus/benz.config" ]; then
+           zip_name="OPNCE4-v5.15.$(grep "^SUBLEVEL =" Makefile | awk '{print $3}')-$(date +"%Y%m%d-%H%M").zip"
+           else
+           zip_name="OP12R-v5.15.$(grep "^SUBLEVEL =" Makefile | awk '{print $3}')-$(date +"%Y%m%d-%H%M").zip"
+           fi
+          cd $KERNEL_PATH/AnyKernel3
+           cp $KERNEL_PATH/out/arch/arm64/boot/Image $KERNEL_PATH/AnyKernel3/
+           zip -r kernel.zip ./*
+           mv kernel.zip $KERNEL_PATH/out
+          ln -sf $KERNEL_PATH/out/kernel.zip $KERNEL_PATH/out/${zip_name}
+          echo -e "${green}out: ${KERNEL_PATH}/out/${zip_name}${clear}"
+          echo -e "${clear}"
+         echo -e "${green}Completed in $(($(date +%s) - start)) seconds.${clear}"
+         cd $KERNEL_PATH
+         git checkout HEAD scripts/setlocalversion
+         rm AnyKernel3/Image
+         exit
+
 
     - name: Upload Kernel
       uses: actions/upload-artifact@v4
