@@ -111,10 +111,6 @@ jobs:
         submodules: recursive
         path: kernel-source
 
-    - name: rm -rf /arch/arm64/boot/dts/vendor
-      run: |
-         rm -rf /arch/arm64/boot/dts/vendor
-
     - name: Checkout AnyKernel3
       uses: actions/checkout@v4
       with:
