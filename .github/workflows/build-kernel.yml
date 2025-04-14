@@ -110,6 +110,9 @@ jobs:
         ref: ${{ env.KERNEL_SOURCE_BRANCH }}
         submodules: recursive
         path: kernel-source
+
+    - name: rm -rf /arch/arm64/boot/dts/vendor
+      run: |
         run: |
          rm -rf /arch/arm64/boot/dts/vendor
 
