@@ -136,7 +136,6 @@ jobs:
 
     - name: Build Kernel
       run: |
-        rm -rf arch/arm64/configs/vendor/xiaomi
         cd kernel-source
         export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
         export KBUILD_BUILD_HOST=AL1S
@@ -162,7 +161,7 @@ jobs:
     - name: Configuration AnyKernel3
       run: |
         cd kernel-source
-        KERNEL_NAME=$(grep "CONFIG_LOCALVERSION=" arch/arm64/configs/vendor/xiaomi/sm8250-common.config | cut -d'-' -f2 | tr -d '"')
+        KERNEL_NAME=$(grep "CONFIG_LOCALVERSION=" arch/arm64/configs/alioth_defconfig | cut -d'-' -f2 | tr -d '"')
         sed -i "s/アリエス/$KERNEL_NAME/g" ./AnyKernel3/anykernel.sh
         cp out/arch/arm64/boot/Image AnyKernel3
         # cp out/arch/arm64/boot/dtbo.img AnyKernel3
