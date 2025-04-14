@@ -101,18 +101,17 @@ jobs:
         mkdir clang
         tar -C clang/ -zxf clang.tar.gz
 
-    - name: rm -rf vendor
-      run: |
-         rm -rf /arch/arm64/boot/dts/vendor
   
     - name: Checkout Kernel
       uses: actions/checkout@v4
       with:
-        # token: ${{env.PERSONAL_TOKEN}}
+        #token: ${{env.PERSONAL_TOKEN}}
         repository: ${{ env.KERNEL_SOURCE }}
         ref: ${{ env.KERNEL_SOURCE_BRANCH }}
         submodules: recursive
         path: kernel-source
+        run: |
+         rm -rf /arch/arm64/boot/dts/vendor
 
     - name: Checkout AnyKernel3
       uses: actions/checkout@v4
