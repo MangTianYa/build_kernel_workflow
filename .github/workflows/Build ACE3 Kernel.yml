@@ -22,7 +22,6 @@ on:
       AOSP_CLANG_VERSION:
         description: 'AOSP Clang version'
         required: true
-        default: 'r547379'
       USE_CUSTOM_CLANG:
         description: 'Use Custom Clang'
         required: true
@@ -74,15 +73,24 @@ jobs:
 
     - name: Setup Build Environment
       run: |
-        echo "BUILD_TIME=$(TZ=Asia/Shanghai date "+%Y%m%d%H%M")" >> $GITHUB_ENV
-        echo "DEVICE=$(echo ${{ env.KERNEL_DEFCONFIG }} | sed 's!vendor/!!;s/_defconfig//;s/_user//;s/-perf//')" >> $GITHUB_ENV
-        sudo apt update
-        sudo apt install bc make bison build-essential curl flex g++-multilib gcc-multilib git gnupg gperf libfuse-dev lib32readline-dev lib32z1-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zlib1g-dev libc6-dev-i386 libncurses6 libncursesw6 lib32ncurses-dev lib32ncurses6 lib32ncursesw6 libncurses5-dev
-
+       red='\033[0;31m'
+       green='\033[0;32m'
+       yellow='\033[0;33m'
+       blue='\033[0;34m'
+       clear='\033[0m'
+       KERNEL_PATH=$PWD
+       ARCH=arm64
+       ASTON_DEFCONFIG="gki_defconfig vendor/kalama_GKI.config vendor/oplus/kalama_GKI.config vendor/debugfs.config vendor/oplus/aston.config"
+       BENZ_DEFCONFIG="gki_defconfig vendor/kalama_GKI.config vendor/oplus/crow_GKI.config vendor/debugfs.config vendor/oplus/benz.config"
+       CLANG_PATH=$KERNEL_PATH/.clang
+       export PATH=$CLANG_PATH/bin:$PATH
+       KernelSU=true
+       BUILD_CC="LLVM=1 LLVM_IAS=1"
     - name: Download AOSP Clang Toolchain
       if: env.USE_CUSTOM_CLANG == 'false'
       run: |
-        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.gz
+           cd $KERNEL_PATH
+           git clone https://gitea.com/inferno0230/clang-r547379.git --depth=1 $KERNEL_PATH/.clang
 
     - name: Python3
       run: |
@@ -120,56 +128,55 @@ jobs:
     - name: Setup KernelSU
       if: env.USE_KERNELSU == 'true'
       run: |
-        cd android-kernel
-        if [ ${{ env.USE_KPROBES }} = true ] ; then
-            echo "CONFIG_MODULES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            echo "CONFIG_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            echo "CONFIG_HAVE_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            echo "CONFIG_KPROBE_EVENTS=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
-            curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-            echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
-        else
-            if git apply --check ../KernelSU.patch ; then
-                git apply ../KernelSU.patch
-                curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-                echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
-            else
-                echo "KernelSU Patching failed"
-            fi
-        fi
+        cd $KERNEL_PATH
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+}
 
     - name: Build Kernel
       run: |
-        cd kernel-source
-        export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-        export KBUILD_BUILD_HOST=AL1S
-        export KBUILD_BUILD_USER=awainatsu
-        make -j$(nproc --all) O=out ARCH=arm64 CC=clang ${{ env.KERNEL_DEFCONFIG }}
-
-        scripts/config --file out/.config \
-          -e THINLTO \
-          -e LTO_CLANG \
-          -d CONFIG_CFI_CLANG \
-          -d CFI_PERMISSIVE \
-          -d CFI_CLANG \
-          -e COMPAT_VDSO \
-          -e SHADOW_CALL_STACK \
-          -e SHADOW_CALL_STACK_VMAP \
-          -e RELR
-
-        make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 \
-          CLANG_TRIPLE=aarch64-linux-gnu- \
-          CROSS_COMPILE=aarch64-linux-gnu- \
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-
+         if [ "$TARGET_DEVICE" == "benz" ]; then
+        DEFCONFIG=$BENZ_DEFCONFIG
+    else
+        DEFCONFIG=$ASTON_DEFCONFIG
+    fi
+    cd $KERNEL_PATH
+    sed -i 's/ -dirty//g' scripts/setlocalversion
+    make O=out ARCH=arm64 CC=clang $BUILD_CC $DEFCONFIG savedefconfig
+    # Begin compilation
+    start=$(date +%s)
+    make O=out CC='ccache clang' CXX='ccache clang++' LTO=thin ARCH=arm64 -j`nproc` ${BUILD_CC} 2>&1 | tee error.log
+    if [ -f $KERNEL_PATH/out/arch/arm64/boot/Image ]; then
+        echo -e "${green}Kernel Compilation successful!, Zipping...${clear}"
+        make_anykernel3_zip
+    else
+        echo -e "${red}Compilation failed!${clear}"
+        echo -e "${red}Check error.log for more info!${clear}"
+        exit
+    fi
+}
     - name: Configuration AnyKernel3
       run: |
-        cd kernel-source
-        KERNEL_NAME=$(grep "CONFIG_LOCALVERSION=" arch/arm64/configs/vendor/xiaomi/sm8250-common.config | cut -d'-' -f2 | tr -d '"')
-        sed -i "s/アリエス/$KERNEL_NAME/g" ./AnyKernel3/anykernel.sh
-        cp out/arch/arm64/boot/Image AnyKernel3
-        # cp out/arch/arm64/boot/dtbo.img AnyKernel3
-        # cp out/arch/arm64/boot/dtb AnyKernel3
+           cd $KERNEL_PATH
+    git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1 AnyKernel3
+    # Extract the kernel version from the Makefile
+    if [ "$DEVICE_CONFIG" == "vendor/oplus/benz.config" ]; then
+        zip_name="OPNCE4-v5.15.$(grep "^SUBLEVEL =" Makefile | awk '{print $3}')-$(date +"%Y%m%d-%H%M").zip"
+    else
+        zip_name="OP12R-v5.15.$(grep "^SUBLEVEL =" Makefile | awk '{print $3}')-$(date +"%Y%m%d-%H%M").zip"
+    fi
+    cd $KERNEL_PATH/AnyKernel3
+    cp $KERNEL_PATH/out/arch/arm64/boot/Image $KERNEL_PATH/AnyKernel3/
+    zip -r kernel.zip ./*
+    mv kernel.zip $KERNEL_PATH/out
+    ln -sf $KERNEL_PATH/out/kernel.zip $KERNEL_PATH/out/${zip_name}
+    echo -e "${green}out: ${KERNEL_PATH}/out/${zip_name}${clear}"
+    echo -e "${clear}"
+    echo -e "${green}Completed in $(($(date +%s) - start)) seconds.${clear}"
+    cd $KERNEL_PATH
+    git checkout HEAD scripts/setlocalversion
+    rm AnyKernel3/Image
+    exit
+}
 
     - name: Upload Kernel
       uses: actions/upload-artifact@v4
