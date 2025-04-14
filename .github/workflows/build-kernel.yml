@@ -113,7 +113,6 @@ jobs:
 
     - name: rm -rf /arch/arm64/boot/dts/vendor
       run: |
-        run: |
          rm -rf /arch/arm64/boot/dts/vendor
 
     - name: Checkout AnyKernel3
