@@ -101,6 +101,10 @@ jobs:
         mkdir clang
         tar -C clang/ -zxf clang.tar.gz
 
+    - name: rm -rf vendor
+      run: |
+         rm -rf /arch/arm64/boot/dts/vendor
+  
     - name: Checkout Kernel
       uses: actions/checkout@v4
       with:
