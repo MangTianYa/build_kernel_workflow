@@ -136,6 +136,7 @@ jobs:
 
     - name: Build Kernel
       run: |
+        rm -rf /arch/arm64/boot/dts/vendor
         cd kernel-source
         export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
         export KBUILD_BUILD_HOST=AL1S
