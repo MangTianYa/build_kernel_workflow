@@ -14,7 +14,7 @@ on:
       KERNEL_DEFCONFIG:
         description: 'Defconfig'
         required: true
-        default: 'alioth_defconfig'
+        default: '/vendor/oplus/aston.config'
       AOSP_CLANG_BRANCH:
         description: 'AOSP Clang branch'
         required: true
@@ -117,21 +117,25 @@ jobs:
         repository: sakana164/AnyKernel3
         path: kernel-source/AnyKernel3
 
-    - name: Setup KernelSU
-      if: env.ENABLE_KERNELSU == 'true'
+     - name: Setup KernelSU
+      if: env.USE_KERNELSU == 'true'
       run: |
-        cd kernel-source
-        git config --global user.email "lightsummer233@awainatsu.moe"
-        git config --global user.name "lightsummer233"
-        git am ../patch/KernelSU.patch
-        echo "CONFIG_KSU=y" >> arch/arm64/configs/${{ env.KERNEL_DEFCONFIG }}
-        curl -LSs "https://raw.githubusercontent.com/lightsummer233/KernelSU/main/kernel/setup.sh" | bash -s main
-        echo "ENABLE_KERNELSU=-KernelSU" >> $GITHUB_ENV
-        if [ ${{ env.ENABLE_KERNELSU_DEBUG }} = true ]; then
-          echo "CONFIG_KSU_DEBUG=y" >> arch/arm64/configs/${{ env.KERNEL_DEFCONFIG }}
-        fi
-        if [ ${{ env.ADD_PATH_UMOUNT }} = true ]; then
-          git am ../patch/KernelSU-path_umount.patch
+        cd android-kernel
+        if [ ${{ env.USE_KPROBES }} = true ] ; then
+            echo "CONFIG_MODULES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            echo "CONFIG_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            echo "CONFIG_HAVE_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            echo "CONFIG_KPROBE_EVENTS=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+            echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
+        else
+            if git apply --check ../KernelSU.patch ; then
+                git apply ../KernelSU.patch
+                curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+                echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
+            else
+                echo "KernelSU Patching failed"
+            fi
         fi
 
     - name: Build Kernel
