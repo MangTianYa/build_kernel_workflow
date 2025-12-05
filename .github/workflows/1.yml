@@ -6,7 +6,7 @@ on:
       KERNEL_SOURCE:
         description:  'Kernel Source'
         required: true
-        default: "PixelOS-Devices/android_kernel_oneplus_sm8550"
+        default: "https://github.com/PixelOS-Devices/android_kernel_oneplus_sm8550"
       KERNEL_SOURCE_BRANCH:
         description: 'Branch'
         required: true
