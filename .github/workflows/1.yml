@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       KERNEL_SOURCE:
-        description: "Kernel source repo"
+        description:  "PixelOS-Devices/android_kernel_oneplus_sm8550"
         required: true
       KERNEL_SOURCE_BRANCH:
-        description: "Kernel source branch"
+        description: "sixteen-qpr10"
         required: true
       KERNEL_DEFCONFIG:
-        description: "Defconfig path (e.g. vendor/oplus_sm8550_defconfig)"
+        description: "vendor/oplus/kalama_GKI.config"
         required: true
       USE_CUSTOM_CLANG:
         description: "Use custom clang?"
@@ -22,11 +22,6 @@ on:
         required: false
       ENABLE_KERNELSU:
         description: "Enable KernelSU?"
-        type: choice
-        options: ["false", "true"]
-        default: "false"
-      ENABLE_SUSFS:
-        description: "Enable SUSFS?"
         type: choice
         options: ["false", "true"]
         default: "false"
@@ -75,7 +70,7 @@ jobs:
       run: |
         CLANG_VERSION="r487747c"
         CLANG_BRANCH="main"
-        URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${CLANG_BRANCH}/clang-${CLANG_VERSION}.tar.gz"
+        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.
 
         wget -q "$URL" -O clang.tar.gz
         mkdir clang && tar -xf clang.tar.gz -C clang
@@ -94,15 +89,8 @@ jobs:
       if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd kernel
-        git clone --depth=1 https://github.com/tiann/KernelSU.git KernelSU
-        cd KernelSU/kernel && bash apply.sh ../..
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
 
-    - name: Apply SUSFS
-      if: env.ENABLE_SUSFS == 'true'
-      run: |
-        cd kernel
-        git clone https://github.com/MeowIce/susfs.git
-        cd susfs/kernel && bash apply.sh ../..
 
     - name: Build Kernel
       run: |
