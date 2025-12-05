@@ -6,11 +6,11 @@ on:
       KERNEL_SOURCE:
         description:  'Kernel Source'
         required: true
-        default: "https://github.com/PixelOS-Devices/android_kernel_oneplus_sm8550"
+        default: "PixelOS-Devices/android_kernel_oneplus_sm8550"
       KERNEL_SOURCE_BRANCH:
         description: 'Branch'
         required: true
-        default: "sixteen-qpr10"
+        default: "sixteen-qpr1"
       KERNEL_DEFCONFIG:
         description: 'Defconfig'
         required: true
