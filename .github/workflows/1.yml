@@ -4,22 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       KERNEL_SOURCE:
-        description:  "PixelOS-Devices/android_kernel_oneplus_sm8550"
+        description:  'Kernel Source'
         required: true
+        default: "PixelOS-Devices/android_kernel_oneplus_sm8550"
       KERNEL_SOURCE_BRANCH:
-        description: "sixteen-qpr10"
+        description: 'Branch'
         required: true
+        default: "sixteen-qpr10"
       KERNEL_DEFCONFIG:
-        description: "vendor/oplus/kalama_GKI.config"
+        description: 'Defconfig'
         required: true
-      USE_CUSTOM_CLANG:
-        description: "Use custom clang?"
-        type: choice
-        options: ["false", "true"]
-        default: "false"
-      CUSTOM_CLANG_URL:
-        description: "Custom Clang URL (.tar.gz)"
-        required: false
+        default: "vendor/oplus/kalama_GKI.config"
+      AOSP_CLANG_BRANCH:
+        description: 'AOSP Clang branch'
+        required: true
+        default: 'main'
+      AOSP_CLANG_VERSION:
+        description: 'AOSP Clang version'
+        required: true
+        default: 'r487747c'
       ENABLE_KERNELSU:
         description: "Enable KernelSU?"
         type: choice
@@ -65,12 +68,11 @@ jobs:
         device=$(echo "$KERNEL_DEFCONFIG" | sed 's!vendor/!!;s/_defconfig//;s/_user//;s/-perf//')
         echo "DEVICE=$device" >> $GITHUB_ENV
 
-    - name: Download AOSP Clang for 5.15
+    - name: Download AOSP Clang Toolchain
       if: env.USE_CUSTOM_CLANG == 'false'
       run: |
-        CLANG_VERSION="r487747c"
-        CLANG_BRANCH="main"
-        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.
+        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${{ env.AOSP_CLANG_BRANCH }}/clang-${{ env.AOSP_CLANG_VERSION }}.tar.gz -O clang.tar.gz
+
 
         wget -q "$URL" -O clang.tar.gz
         mkdir clang && tar -xf clang.tar.gz -C clang
