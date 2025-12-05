@@ -1,0 +1,132 @@
+name: Build Kernel 5.15
+
+on:
+  workflow_dispatch:
+    inputs:
+      KERNEL_SOURCE:
+        description: "Kernel source repo"
+        required: true
+      KERNEL_SOURCE_BRANCH:
+        description: "Kernel source branch"
+        required: true
+      KERNEL_DEFCONFIG:
+        description: "Defconfig path (e.g. vendor/oplus_sm8550_defconfig)"
+        required: true
+      USE_CUSTOM_CLANG:
+        description: "Use custom clang?"
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+      CUSTOM_CLANG_URL:
+        description: "Custom Clang URL (.tar.gz)"
+        required: false
+      ENABLE_KERNELSU:
+        description: "Enable KernelSU?"
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+      ENABLE_SUSFS:
+        description: "Enable SUSFS?"
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+
+jobs:
+  build:
+    name: Build Kernel
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - name: Set Environment
+      run: |
+        echo "KERNEL_SOURCE=${{ github.event.inputs.KERNEL_SOURCE }}" >> $GITHUB_ENV
+        echo "KERNEL_SOURCE_BRANCH=${{ github.event.inputs.KERNEL_SOURCE_BRANCH }}" >> $GITHUB_ENV
+        echo "KERNEL_DEFCONFIG=${{ github.event.inputs.KERNEL_DEFCONFIG }}" >> $GITHUB_ENV
+        echo "USE_CUSTOM_CLANG=${{ github.event.inputs.USE_CUSTOM_CLANG }}" >> $GITHUB_ENV
+        echo "CUSTOM_CLANG_URL=${{ github.event.inputs.CUSTOM_CLANG_URL }}" >> $GITHUB_ENV
+        echo "ENABLE_KERNELSU=${{ github.event.inputs.ENABLE_KERNELSU }}" >> $GITHUB_ENV
+        echo "ENABLE_SUSFS=${{ github.event.inputs.ENABLE_SUSFS }}" >> $GITHUB_ENV
+
+    - name: Install Build Dependencies (5.15 LTS)
+      run: |
+        sudo apt update
+        sudo apt install -y \
+          bc build-essential bison flex \
+          gcc-multilib g++-multilib \
+          git libelf-dev libssl-dev libudev-dev \
+          liblz4-tool lzop \
+          libncurses5-dev \
+          python3 rsync dwarves ccache
+
+    - name: Clone Kernel Source
+      run: |
+        git clone --depth=1 -b $KERNEL_SOURCE_BRANCH $KERNEL_SOURCE kernel
+
+    - name: Extract Device Name
+      run: |
+        device=$(echo "$KERNEL_DEFCONFIG" | sed 's!vendor/!!;s/_defconfig//;s/_user//;s/-perf//')
+        echo "DEVICE=$device" >> $GITHUB_ENV
+
+    - name: Download AOSP Clang for 5.15
+      if: env.USE_CUSTOM_CLANG == 'false'
+      run: |
+        CLANG_VERSION="r487747c"
+        CLANG_BRANCH="main"
+        URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${CLANG_BRANCH}/clang-${CLANG_VERSION}.tar.gz"
+
+        wget -q "$URL" -O clang.tar.gz
+        mkdir clang && tar -xf clang.tar.gz -C clang
+        echo "PATH=$(pwd)/clang/bin:$PATH" >> $GITHUB_ENV
+        echo "LLVM=1" >> $GITHUB_ENV
+
+    - name: Download Custom Clang
+      if: env.USE_CUSTOM_CLANG == 'true'
+      run: |
+        wget -q "$CUSTOM_CLANG_URL" -O clang.tar.gz
+        mkdir clang && tar -xf clang.tar.gz -C clang
+        echo "PATH=$(pwd)/clang/bin:$PATH" >> $GITHUB_ENV
+        echo "LLVM=1" >> $GITHUB_ENV
+
+    - name: Apply KernelSU
+      if: env.ENABLE_KERNELSU == 'true'
+      run: |
+        cd kernel
+        git clone --depth=1 https://github.com/tiann/KernelSU.git KernelSU
+        cd KernelSU/kernel && bash apply.sh ../..
+
+    - name: Apply SUSFS
+      if: env.ENABLE_SUSFS == 'true'
+      run: |
+        cd kernel
+        git clone https://github.com/MeowIce/susfs.git
+        cd susfs/kernel && bash apply.sh ../..
+
+    - name: Build Kernel
+      run: |
+        cd kernel
+        make O=out $KERNEL_DEFCONFIG
+        make -j$(nproc) O=out \
+          LLVM=1 \
+          CC=clang \
+          AR=llvm-ar \
+          NM=llvm-nm \
+          OBJCOPY=llvm-objcopy \
+          OBJDUMP=llvm-objdump \
+          STRIP=llvm-strip
+
+    - name: Collect Outputs
+      run: |
+        mkdir output
+        cp kernel/out/arch/arm64/boot/Image output/
+        cp kernel/out/arch/arm64/boot/Image.gz output/ || true
+        cp kernel/out/arch/arm64/boot/dtbo.img output/ || true
+        cp -r kernel/out/arch/arm64/boot/dts output/dts || true
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.DEVICE }}-kernel
+        path: output
